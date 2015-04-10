@@ -17,8 +17,4 @@ end
 # from ssh debugging info.
 SSHKit.config.output = $stderr if ENV['STDERR']
 SSHKit.config.output_verbosity = :debug if ENV['DEBUG']
-
 SSHKit.config.format = :pretty
-
-$app_servers = %w{vagrant@10.1.1.10}
-$app_path    = "/opt/apps"

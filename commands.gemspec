@@ -17,4 +17,6 @@ Gem::Specification.new do |s|
   s.executables << 'commands'
 
   s.add_dependency "aws-sdk", "2.0.6.pre"
+  s.add_dependency "sshkit"
+  s.add_dependency "sshkey"
 end
