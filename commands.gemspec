@@ -20,4 +20,6 @@ Gem::Specification.new do |s|
   s.add_dependency "sshkit"
   s.add_dependency "sshkey"
   s.add_dependency "thor"
+
+  s.add_development_dependency "rspec"
 end
