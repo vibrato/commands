@@ -8,7 +8,6 @@ require 'net/ssh/proxy/command'
 SSHKit::Backend::Netssh.configure do |ssh|
   ssh.pty = true
   ssh.ssh_options = {
-  	keys: File.join(Dir.pwd, "keys", "arnie-staging.pem"),
     forward_agent: true
   }
 end

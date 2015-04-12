@@ -3,11 +3,14 @@ require "thor/group"
 require "aws-sdk"
 require "sshkey"
 
+require "commands/node"
 require "commands/aws"
 require "commands/environment"
 require "commands/ssh"
+require "commands/dna"
 
 module Derp
+
   # See <http://stackoverflow.com/questions/5663519>
   class Commands < Thor
     class << self
@@ -26,12 +29,4 @@ module Derp
       end
     end
   end
-
-  class CLI < Thor
-    #require_relative "../hava-api/hava.rb"
-
-    #Hava.register_to(self)
-  end
 end
-
-Derp::CLI.start

@@ -1,22 +1,27 @@
 require "commands/aws"
 
 class Environment
-  attr_reader :name, :key, :app
+  attr_reader :name, :key
 
-  def initialize(application_name, environment_name)
-    @app  = application_name
-    @name = environment_name
-    key_name = "#{app}-#{name}"
+  def initialize(name=nil)
+    @name = name ? name : "development"
 
-    # pull in the app-specific DNA customisers
-    #require_relative File.join(app_dir, "dna_customise")
+    puts ""
+    puts " Environment: #{name}"
+
+    # pull in the -specific DNA customisers
+    #require File.join(".", _dir, "dna_customise.rb") if File.exist?(File.join(".", _dir, "dna_customise.rb"))
 
     # if !dev?
-    #   key_file = File.expand_path("../../hava/keys/#{key_name}.pem", __FILE__)
+    #   key_file = "keys/#{key_name}.pem"
     #   key_file_exists = File.exist?(key_file)
+    #   File.chmod(0600, key_file) if key_file_exists
+
+    #   puts `ssh-add #{key_file}`
 
     #   if keypair_exists?
     #     if key_file_exists
+    #       puts "found existing ssh key"
     #       @key = key_file
     #     else
     #       raise Exception.new("Environment's keypair already exists, please add environments key to keys/ directory") unless key_file_exists
@@ -39,19 +44,37 @@ class Environment
     #   puts key
     # end
 
-    puts "keypath: #{File.join(Dir.pwd, "keys", "#{key_name}.pem")}"
+    #puts " Key: #{key}"
+    #puts ""
 
     # Make connections
     SSHKit::Backend::Netssh.configure do |ssh|
       ssh.pty = true
       ssh.ssh_options = {
-        keys: File.join(Dir.pwd, "keys", "#{key_name}.pem"),
+        keys: File.join(Dir.pwd, "keys", "#{name}.pem"),
         forward_agent: true,
-        #proxy: Net::SSH::Proxy::Command.new("ssh NATIP -W %h:%p -oStrictHostKeyChecking=no"),
+        proxy: nil,
         user_known_hosts_file: "/dev/null"
       }
+
+      puts ssh.ssh_options
     end
     SSHKit.config.output_verbosity= Logger::DEBUG
+
+    # set_ssh_proxy if !dev?
+  end
+
+  def on(nodes, &blk)
+    puts "ON: <<<<<<<<<<<<<_________________>>>>>>>>>>>>>>>>"
+
+    set_ssh_proxy
+
+    details = nodes.collect { |node| "#{node.ssh_username}@#{node.address}" }
+
+    # First do those that don't require a proxy
+    SSHKit::DSL.on(details, {}, &blk)
+
+    # Then those that do require a proxy
   end
 
   def dev?
@@ -60,7 +83,7 @@ class Environment
 
   def keypair_exists?
     begin
-      $ec2.describe_key_pairs(key_names: ["#{app}-#{name}"])
+      $ec2.describe_key_pairs(key_names: [name])
       true
     rescue Aws::EC2::Errors::InvalidKeyPairNotFound
       false
@@ -70,28 +93,33 @@ class Environment
   def set_ssh_proxy
     ip = get_nat_ip
 
-    puts "setting ssh proxy: ssh #{ip} -W %h:%p -oStrictHostKeyChecking=no"
+    puts " Setting ssh proxy: ssh #{ip} -W %h:%p -oStrictHostKeyChecking=no"
     SSHKit::Backend::Netssh.configure do |ssh|
       ssh.ssh_options.merge!({ proxy: Net::SSH::Proxy::Command.new("ssh #{ip} -W %h:%p -oStrictHostKeyChecking=no") })
     end
   end
 
   def create_key(key_name)
-    key_file = File.expand_path("../keys/#{key_name}.pem", __FILE__)
+
+    puts " Creating a new SSH key"
+
+    key_file = "keys/#{key_name}.pem"
     key = SSHKey.generate(type: "RSA", bits: 2048)
     private_key = key.private_key
 
     File.open(key_file, "w") do |f|
       f.write(private_key)
     end
-
     File.chmod(0600, key_file)
 
     key.ssh_public_key
   end
 
   def load_key(key_name)
-    key_file = File.expand_path("../keys/#{key_name}.pem", __FILE__)
+
+    puts " Loading SSH key"
+
+    key_file = "keys/#{key_name}.pem"
     private_key = File.open(key_file).read
     key = SSHKey.new(private_key)
 
@@ -99,47 +127,62 @@ class Environment
     key.ssh_public_key
   end
 
-  def app_dir
-    File.join(__dir__, "/../hava", "apps", app)
-  end
-
+  ##############################
+  # Custom DNA
   def get_dna
-    cf_json = File.open(File.join(app_dir, "dna.json")).read
-    json = JSON.parse(cf_json)
 
-    #puts JSON.pretty_generate(json)
+    autoload :CustomDNA, './dna.rb'
 
-    app_servers = get_app_servers.collect { |x| x[:instances].collect { |y| y[:private_ip_address] }.first }
+    CustomDNA.new.dna(self)
 
-    #puts app_servers.inspect
+    # cf_json = File.open(File.join(_dir, "dna.json")).read
+    # json = JSON.parse(cf_json)
 
-    # trans_db = get_trans_db
-    # report_db = get_report_db
-    # cache = get_cache
+    # _servers = get__servers.collect { |x| x[:instances].collect { |y| y[:private_ip_address] }.first }
 
-    # puts trans_db
-    # puts report_db
-    # puts cache
+    # customise_dna(json, name) # from the 's dna_customise.rb
 
-    customise_dna(json, name) # from the app's dna_customise.rb
-
-    json
+    # json
   end
 
-  # {"system"=>{"hostname"=>"survey-dev.in.yarris.com",
-  # "ip_address"=>"10.2.101.10",
-  #"hosts"=>{"name"=>["survey-dev.in.yarris.com"], "alias"=>[["survey-dev"]], "ip_address"=>["10.2.101.10"]}},
-  #"mongodb"=>{"install_method"=>"mongodb-org", "package_name"=>"mongodb-org", "FORTESTONLY_cluster_name"=>"surveyuat"}}
-  def get_node_dna(private_ip)
-    cf_json = File.open(File.join(app_dir, "dna.json")).read
-    json = JSON.parse(cf_json)
+  ##############################
+  # SSH Proxy
 
-    #json["system"] = system_dna(private_ip)
+  # Get NAT instance details
+  def get_nat_ip
+    nat = ""
+    instances_for_role("nat").each do |res|
+      res[:instances].each do |inst|
+        nat << "ec2-user@#{inst[:network_interfaces].first[:association][:public_ip]}"
+      end
+    end
 
-    # customise_node_dna(json, name, self) # from the app's dna_customise.rb
-
-    json
+    nat
   end
+
+  # Get App server details
+  def get_instances(role: nil, username: nil, bastion: nil)
+    puts "getting instances for #{role}!"
+    servers = []
+    instances_for_role(role).each do |res|
+      res[:instances].each do |inst|
+        servers << Node.new(ssh_username: username, address: inst[:private_ip_address], bastion: bastion, details: inst)
+      end
+    end
+
+    servers
+  end
+
+  # def get_node_dna(private_ip)
+  #   cf_json = File.open(File.join(_dir, "dna.json")).read
+  #   json = JSON.parse(cf_json)
+
+  #   json["system"] = system_dna(private_ip)
+
+  #   customise_node_dna(json, name, self) # from the 's dna_customise.rb
+
+  #   json
+  # end
 
   # def system_dna(private_ip)
   #   node = instances_for_filter("private-ip-address", private_ip).first[:instances].first
@@ -160,8 +203,8 @@ class Environment
   #   system
   # end
 
-  def get_trans_db
-    resp = $rds.describe_db_instances(db_instance_identifier: "#{app}-#{name}-transaction")
+  def get_db
+    resp = $rds.describe_db_instances(db_instance_identifier: "#{}-#{name}-transaction")
 
     trans = resp[:db_instances].first
 
@@ -170,18 +213,18 @@ class Environment
     trans[:endpoint][:address]
   end
 
-  def get_report_db
-    resp = $rds.describe_db_instances(db_instance_identifier: "#{app}-#{name}-report")
+  # def get_report_db
+  #   resp = $rds.describe_db_instances(db_instance_identifier: "#{}-#{name}-report")
 
-    report = resp[:db_instances].first
+  #   report = resp[:db_instances].first
 
-    raise "Report DB endpoint details not available yet" if report[:endpoint].nil?
+  #   raise "Report DB endpoint details not available yet" if report[:endpoint].nil?
 
-    report[:endpoint][:address]
-  end
+  #   report[:endpoint][:address]
+  # end
 
   def get_cache
-    resp = $elasticache.describe_cache_clusters(cache_cluster_id: "#{app}-#{name}-cache", show_cache_node_info: true)
+    resp = $elasticache.describe_cache_clusters(cache_cluster_id: "#{}-#{name}-cache", show_cache_node_info: true)
 
     cache = resp[:cache_clusters].first
     cache_node = cache[:cache_nodes].first
@@ -191,16 +234,12 @@ class Environment
     cache_node[:endpoint][:address]
   end
 
-  def get_app_servers
-    instances_for_role("app")
-  end
-
-  def create_stack
-    cf_json = File.open(File.join(__dir__, "apps", "#{app}", "#{app}.json")).read
+  def create_stack(template)
+    cf_json = File.open(template).read
     json = JSON.parse(cf_json)
 
     begin
-      resp = $cloudformation.describe_stacks(stack_name: "#{app}-#{name}")
+      resp = $cloudformation.describe_stacks(stack_name: name)
 
       if resp[:stacks].any?
         puts "Stack already exists"
@@ -211,9 +250,9 @@ class Environment
         puts stack[:stack_name]
       end
     rescue Aws::CloudFormation::Errors::ValidationError => e
-      puts "Creating new environment: #{app}-#{name}"
+      puts "Creating new environment:name"
       resp = $cloudformation.create_stack(
-        stack_name: "#{app}-#{name}",
+        stack_name: name,
         template_body: json.to_json,
         parameters: [{
           parameter_key: "EnvironmentName",
@@ -221,17 +260,17 @@ class Environment
         }],
         tags: [{
           key: "environment",
-          value: "#{app}-#{name}"
+          value: name
         }])
     end
   end
 
-  def update_stack
-    cf_json = File.open(File.join(__dir__, "/../", "hava", "apps", "#{app}", "#{app}.json")).read
+  def update_stack(template)
+    cf_json = File.open(template).read
     json = JSON.parse(cf_json)
 
     $cloudformation.update_stack(
-      stack_name: "#{app}-#{name}",
+      stack_name: name,
       template_body: json.to_json,
       parameters: [{
         parameter_key: "EnvironmentName",
@@ -243,7 +282,7 @@ class Environment
     # Now we wait for the instances to be created...
     waiting = true
     while waiting do
-      resp = $cloudformation.describe_stack_resources(stack_name: "#{app}-#{name}")
+      resp = $cloudformation.describe_stack_resources(stack_name: name)
       instances = resp[:stack_resources].select { |x| x[:resource_type] == "AWS::EC2::Instance" }
 
       instances_count = instances.size
@@ -264,7 +303,7 @@ class Environment
 
   def destroy_stack
     begin
-      resp = $cloudformation.describe_stacks(stack_name: "#{app}-#{name}")
+      resp = $cloudformation.describe_stacks(stack_name: name)
 
       if resp[:stacks].any?
         puts "destroying environment!"
@@ -285,7 +324,7 @@ class Environment
     $ec2.describe_instances(
       filters: [
         { name: filter_name, values: [filter_value] },
-        { name: "tag:environment", values: ["#{app}-#{name}"] },
+        { name: "tag:environment", values: [name] },
         { name: "instance-state-name", values: [state] }
       ])[:reservations]
   end
@@ -293,29 +332,5 @@ class Environment
   # Returns an array of EC2 reservations based on the given role and state.
   def instances_for_role(role, state = "running")
     instances_for_filter("tag:role", role, state)
-  end
-
-  def get_nat_ip
-    # Get NAT instance details
-    nat = ""
-    instances_for_role("nat").each do |res|
-      res[:instances].each do |inst|
-        nat << "ec2-user@#{inst[:network_interfaces].first[:association][:public_ip]}"
-      end
-    end
-
-    nat
-  end
-
-  def get_instances(role)
-    # Get App server details
-    servers = []
-    instances_for_role(role).each do |res|
-      res[:instances].each do |inst|
-        servers << "ubuntu@#{inst[:private_ip_address]}"
-      end
-    end
-
-    servers
   end
 end
