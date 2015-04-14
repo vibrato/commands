@@ -6,46 +6,7 @@ class Environment
   def initialize(name=nil)
     @name = name ? name : "development"
 
-    puts ""
-    puts " Environment: #{name}"
-
-    # pull in the -specific DNA customisers
-    #require File.join(".", _dir, "dna_customise.rb") if File.exist?(File.join(".", _dir, "dna_customise.rb"))
-
-    # if !dev?
-    #   key_file = "keys/#{key_name}.pem"
-    #   key_file_exists = File.exist?(key_file)
-    #   File.chmod(0600, key_file) if key_file_exists
-
-    #   puts `ssh-add #{key_file}`
-
-    #   if keypair_exists?
-    #     if key_file_exists
-    #       puts "found existing ssh key"
-    #       @key = key_file
-    #     else
-    #       raise Exception.new("Environment's keypair already exists, please add environments key to keys/ directory") unless key_file_exists
-    #     end
-    #   else
-    #     if key_file_exists
-    #       puts "uploading key to aws"
-    #       keyz = load_key(key_name)
-    #       puts "derploaded: #{keyz}"
-    #       puts key_name
-    #     else
-    #       puts "creating key yo"
-    #       keyz = create_key(key_name)
-    #       puts "derp: #{keyz}"
-    #     end
-    #     $ec2.import_key_pair(key_name: key_name, public_key_material: keyz)
-    #     @key = key_file
-    #   end
-
-    #   puts key
-    # end
-
-    #puts " Key: #{key}"
-    #puts ""
+    sort_out_key
 
     # Make connections
     SSHKit::Backend::Netssh.configure do |ssh|
@@ -56,12 +17,43 @@ class Environment
         proxy: nil,
         user_known_hosts_file: "/dev/null"
       }
-
-      puts ssh.ssh_options
     end
     SSHKit.config.output_verbosity= Logger::DEBUG
 
     # set_ssh_proxy if !dev?
+  end
+
+  def sort_out_key
+    if !dev?
+      key_file = "keys/#{name}.pem"
+      key_file_exists = File.exist?(key_file)
+
+      if keypair_exists?
+        if key_file_exists
+          puts "found existing ssh key"
+          @key = key_file
+        else
+          raise Exception.new("Environment's keypair already exists, please add environments key to keys/ directory") unless key_file_exists
+        end
+      else
+        if key_file_exists
+          puts "uploading key to aws"
+          keyz = load_key(name)
+          puts "derploaded: #{keyz}"
+          puts name
+        else
+          puts "creating key yo"
+          keyz = create_key(name)
+          puts "derp: #{keyz}"
+        end
+        $ec2.import_key_pair(key_name: name, public_key_material: keyz)
+        @key = key_file
+      end
+
+      File.chmod(0600, key_file)
+      puts `ssh-add #{key_file}`
+      puts key
+    end
   end
 
   def on(nodes, &blk)
