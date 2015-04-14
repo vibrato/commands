@@ -75,7 +75,7 @@ class Environment
   end
 
   def dev?
-    name == "dev"
+    name == "arnie-dev"
   end
 
   def keypair_exists?
@@ -261,6 +261,20 @@ class Environment
         parameter_key: "EnvironmentName",
         parameter_value: name
       }])
+  end
+
+  def wait_for_stack(name)
+    puts name
+    waiting = true
+    while waiting do
+      resp = $cloudformation.describe_stacks(stack_name: name)
+      stack = resp[:stacks].first
+
+      puts stack.stack_status
+
+      break if stack.stack_status != "CREATE_IN_PROGRESS"
+      sleep 20
+    end
   end
 
   def wait_for_instances_created
