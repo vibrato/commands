@@ -19,6 +19,13 @@ module Derp
         @subcommand_usage = usage
         @subcommand_desc = desc
       end
+
+      def before_command(&blk)
+        puts "bfizzle"
+        puts current_command_chain
+        puts namespace
+        yield
+      end
  
       def banner(task, namespace=nil, subcommand=false)
         "#{basename} #{task.formatted_usage(self, true, true)}"

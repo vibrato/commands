@@ -65,7 +65,6 @@ class Environment
   end
 
   def on(nodes, &blk)
-    puts "ON: <<<<<<<<<<<<<_________________>>>>>>>>>>>>>>>>"
 
     set_ssh_proxy
 
@@ -73,8 +72,6 @@ class Environment
 
     # First do those that don't require a proxy
     SSHKit::DSL.on(details, {}, &blk)
-
-    # Then those that do require a proxy
   end
 
   def dev?
@@ -127,23 +124,27 @@ class Environment
     key.ssh_public_key
   end
 
-  ##############################
-  # Custom DNA
-  def get_dna
-
-    autoload :CustomDNA, './dna.rb'
-
-    CustomDNA.new.dna(self)
-
-    # cf_json = File.open(File.join(_dir, "dna.json")).read
-    # json = JSON.parse(cf_json)
-
-    # _servers = get__servers.collect { |x| x[:instances].collect { |y| y[:private_ip_address] }.first }
-
-    # customise_dna(json, name) # from the 's dna_customise.rb
-
-    # json
+  def get(value, default)
+    default
   end
+
+  ##############################
+  # # Custom DNA
+  # def get_dna
+
+  #   autoload :CustomDNA, './dna.rb'
+
+  #   CustomDNA.new.dna(self)
+
+  #   # cf_json = File.open(File.join(_dir, "dna.json")).read
+  #   # json = JSON.parse(cf_json)
+
+  #   # _servers = get__servers.collect { |x| x[:instances].collect { |y| y[:private_ip_address] }.first }
+
+  #   # customise_dna(json, name) # from the 's dna_customise.rb
+
+  #   # json
+  # end
 
   ##############################
   # SSH Proxy
@@ -166,23 +167,17 @@ class Environment
     servers = []
     instances_for_role(role).each do |res|
       res[:instances].each do |inst|
-        servers << Node.new(ssh_username: username, address: inst[:private_ip_address], bastion: bastion, details: inst)
+        servers << "#{username}@#{inst[:private_ip_address]}" # Node.new(ssh_username: username, address: inst[:private_ip_address], bastion: bastion, details: inst)
       end
     end
 
     servers
   end
 
-  # def get_node_dna(private_ip)
-  #   cf_json = File.open(File.join(_dir, "dna.json")).read
-  #   json = JSON.parse(cf_json)
-
-  #   json["system"] = system_dna(private_ip)
-
-  #   customise_node_dna(json, name, self) # from the 's dna_customise.rb
-
-  #   json
-  # end
+  def get_node_dna(private_ip)
+    autoload :CustomDNA, "./apps/arnie/dna.rb"
+    CustomDNA.new.dna(self, private_ip)
+  end
 
   # def system_dna(private_ip)
   #   node = instances_for_filter("private-ip-address", private_ip).first[:instances].first
@@ -203,8 +198,8 @@ class Environment
   #   system
   # end
 
-  def get_db
-    resp = $rds.describe_db_instances(db_instance_identifier: "#{}-#{name}-transaction")
+  def get_db(db_instance_identifier)
+    resp = $rds.describe_db_instances(db_instance_identifier: db_instance_identifier)
 
     trans = resp[:db_instances].first
 
@@ -213,18 +208,8 @@ class Environment
     trans[:endpoint][:address]
   end
 
-  # def get_report_db
-  #   resp = $rds.describe_db_instances(db_instance_identifier: "#{}-#{name}-report")
-
-  #   report = resp[:db_instances].first
-
-  #   raise "Report DB endpoint details not available yet" if report[:endpoint].nil?
-
-  #   report[:endpoint][:address]
-  # end
-
-  def get_cache
-    resp = $elasticache.describe_cache_clusters(cache_cluster_id: "#{}-#{name}-cache", show_cache_node_info: true)
+  def get_cache(cache_cluster_id)
+    resp = $elasticache.describe_cache_clusters(cache_cluster_id: cache_cluster_id, show_cache_node_info: true)
 
     cache = resp[:cache_clusters].first
     cache_node = cache[:cache_nodes].first
