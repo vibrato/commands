@@ -166,8 +166,8 @@ class Environment
     servers
   end
 
-  def get_node_dna(private_ip)
-    autoload :CustomDNA, "./apps/arnie/dna.rb"
+  def get_node_dna(file, private_ip)
+    autoload :CustomDNA, file
     CustomDNA.new.dna(self, private_ip)
   end
 

@@ -12,6 +12,9 @@ SSHKit::Backend::Netssh.configure do |ssh|
   }
 end
 
+SSHKit::Backend::Netssh.pool.idle_timeout         = 60
+SSHKit::Backend::Netssh.config.connection_timeout = 60
+
 # output to stderr by default. that means we can we can easily seperate "puts"
 # from ssh debugging info.
 SSHKit.config.output = $stderr if ENV['STDERR']
