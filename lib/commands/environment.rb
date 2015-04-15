@@ -193,11 +193,11 @@ class Environment
   def get_db(db_instance_identifier)
     resp = $rds.describe_db_instances(db_instance_identifier: db_instance_identifier)
 
-    trans = resp[:db_instances].first
+    db = resp[:db_instances].first
 
-    raise "Transaction DB endpoint details not available yet" if trans[:endpoint].nil?
+    raise "Transaction DB endpoint details not available yet" if db[:endpoint].nil?
 
-    trans[:endpoint][:address]
+    db
   end
 
   def get_cache(cache_cluster_id)
