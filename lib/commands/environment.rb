@@ -66,8 +66,9 @@ class Environment
     SSHKit::DSL.on(details, {}, &blk)
   end
 
+  # FIXME: this is dum as fuk
   def dev?
-    name == "arnie-dev"
+    name =~ /\-dev/
   end
 
   def keypair_exists?
