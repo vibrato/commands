@@ -231,7 +231,7 @@ class Environment
       puts "Creating new environment:name"
       resp = $cloudformation.create_stack(
         stack_name: name,
-        template_body: json.to_json,
+        template_body: JSON.pretty_generate(json),
         parameters: [{
           parameter_key: "EnvironmentName",
           parameter_value: name
@@ -249,7 +249,7 @@ class Environment
 
     $cloudformation.update_stack(
       stack_name: name,
-      template_body: json.to_json,
+      template_body: JSON.pretty_generate(json),
       parameters: [{
         parameter_key: "EnvironmentName",
         parameter_value: name
