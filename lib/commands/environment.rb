@@ -5,8 +5,9 @@ class Environment
 
   def initialize(name=nil)
     @name = name ? name : "development"
+    puts "creating #{name}"
 
-    sort_out_key
+    # sort_out_key
 
     # Make connections
     SSHKit::Backend::Netssh.configure do |ssh|
@@ -229,9 +230,11 @@ class Environment
       end
     rescue Aws::CloudFormation::Errors::ValidationError => e
       puts "Creating new environment:name"
+      puts name
       resp = $cloudformation.create_stack(
         stack_name: name,
         template_body: JSON.pretty_generate(json),
+        capabilities: ["CAPABILITY_IAM"],
         parameters: [{
           parameter_key: "EnvironmentName",
           parameter_value: name
