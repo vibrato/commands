@@ -1,10 +1,11 @@
 require "commands/aws"
 
 class Environment
-  attr_reader :name, :key
+  attr_reader :name, :key, :type
 
-  def initialize(name=nil)
+  def initialize(name=nil, type=nil)
     @name = name ? name : "development"
+    @type = type ? type : "dev"
 
     sort_out_key
 
@@ -66,9 +67,8 @@ class Environment
     SSHKit::DSL.on(details, {}, &blk)
   end
 
-  # FIXME: this is dum as fuk
   def dev?
-    name =~ /\-dev/
+    type == "dev"
   end
 
   def keypair_exists?
